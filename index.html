@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Demo</title>
+    <meta charset="utf-8">
+    <script>
+class GPG {
+  static _sendAndWaitForResponse (request) {
+    return new Promise((resolve, reject) => {
+      request.direction = 'from-page-script'
+      window.postMessage(request, '*')
+
+      function listener(e) {
+        if (e.source == window &&
+            e.data.direction &&
+            e.data.direction == 'from-content-script') {
+          window.removeEventListener('message', listener)
+
+          const result = e.data
+
+          if (result.type === 'success') {
+            resolve(result.data)
+          } else {
+            reject(result.data)
+          }
+        }
+      }
+
+      window.addEventListener('message', listener)
+    })
+  }
+
+  static async list_keys (priv = false) {
+    return GPG._sendAndWaitForResponse({ 'action': 'list_keys', 'args': [priv], 'kwargs': {} })
+  }
+
+  static async sign (data, keyid, clearsign = false) {
+    return GPG._sendAndWaitForResponse({ 'action': 'sign', 'args': [data], 'kwargs': { keyid, clearsign, 'binary': false } })
+  }
+
+  static async verify (data) {
+    return GPG._sendAndWaitForResponse({ 'action': 'verify', 'args': [data], 'kwargs': {} })
+  }
+
+  // TODO: verify data...
+
+  static async encrypt (data, recipient) {
+    return GPG._sendAndWaitForResponse({ 'action': 'encrypt', 'args': [data, recipient], 'kwargs': { 'armor': true } })
+  }
+
+  static async decrypt (data) {
+    return GPG._sendAndWaitForResponse({ 'action': 'decrypt', 'args': [data], 'kwargs': {} })
+  }
+
+  static async export_key (keyid, minimal = false) {
+    return GPG._sendAndWaitForResponse({ 'action': 'export_keys', 'args': [keyid], 'kwargs': { } })
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const keys = await GPG.list_keys(true)
+  const keysEl = document.querySelector('#private-keys')
+
+  for (const key of keys) {
+    keysEl.innerHTML += `<option value="${key.keyid}">${key.uids[0]} (${key.keyid})</option>`
+  }
+
+  const signMessageBtn = document.querySelector('#sign-message')
+  const messageToSignTxt = document.querySelector('#message-to-sign')
+
+  signMessageBtn
+    .addEventListener('click', async e => {
+      const keyid = keysEl.value
+
+      try {
+        const signature = await GPG.sign(messageToSignTxt.value, keyid)
+        messageToSignTxt.value = signature
+      } catch (e) {
+        console.log('fus', e)
+        messageToSignTxt.value = e
+      }
+    })
+
+  const verifyMessageBtn = document.querySelector('#verify-message')
+  const messageToVerifyTxt = document.querySelector('#message-to-verify')
+
+  verifyMessageBtn
+    .addEventListener('click', async e => {
+      const keyid = keysEl.value
+      const verification = await GPG.verify(messageToVerifyTxt.value)
+
+      messageToVerifyTxt.value = JSON.stringify(verification)
+    })
+
+
+  const encryptMessageBtn = document.querySelector('#encrypt-message')
+  const messageToEncrypt = document.querySelector('#message-to-encrypt')
+
+  encryptMessageBtn
+    .addEventListener('click', async e => {
+      const keyid = keysEl.value
+      const encrypted = await GPG.encrypt(messageToEncrypt.value, keyid)
+
+      messageToEncrypt.value = encrypted
+    })
+
+  const decryptMessageBtn = document.querySelector('#decrypt-message')
+  const messageToDecrypt = document.querySelector('#message-to-decrypt')
+
+  decryptMessageBtn
+    .addEventListener('click', async e => {
+      const keyid = keysEl.value
+      const decrypted = await GPG.decrypt(messageToDecrypt.value)
+
+      messageToDecrypt.value = decrypted
+    })
+
+  const exportPkBtn = document.querySelector('#export-public-key')
+  const publicKey = document.querySelector('#public-key')
+
+  exportPkBtn
+    .addEventListener('click', async e => {
+      const keyid = keysEl.value
+      const pk = await GPG.export_key(keyid)
+
+      publicKey.value = pk
+    })
+})
+    </script>
+  </head>
+  <body>
+    <h2>Private Keys</h2>
+    <select id="private-keys"></select>
+    <hr>
+    <h2>Sign a message</h2>
+    <textarea id="message-to-sign"></textarea>
+    <button type="button" id="sign-message">Sign</button>
+    <hr>
+    <h2>Verify a message</h2>
+    <textarea id="message-to-verify"></textarea>
+    <button type="button" id="verify-message">Verify</button>
+    <hr>
+    <h2>Encrypt a message</h2>
+    <textarea id="message-to-encrypt"></textarea>
+    <button type="button" id="encrypt-message">Encrypt</button>
+    <hr>
+    <h2>Decrypt a message</h2>
+    <textarea id="message-to-decrypt"></textarea>
+    <button type="button" id="decrypt-message">Decrypt</button>
+    <hr>
+    <h2>Export public key</h2>
+    <textarea id="public-key"></textarea>
+    <button type="button" id="export-public-key">Export</button>
+  </body>
+</html>
