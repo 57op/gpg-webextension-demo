@@ -3,69 +3,19 @@
   <head>
     <title>Demo</title>
     <meta charset="utf-8">
+    <script src="api.js"></script>
     <script>
-class GPG {
-  static _sendAndWaitForResponse (request) {
-    return new Promise((resolve, reject) => {
-      request.direction = 'from-page-script'
-      window.postMessage(request, '*')
-
-      function listener(e) {
-        if (e.source == window &&
-            e.data.direction &&
-            e.data.direction == 'from-content-script') {
-          window.removeEventListener('message', listener)
-
-          const result = e.data
-
-          if (result.type === 'success') {
-            resolve(result.data)
-          } else {
-            reject(result.data)
-          }
-        }
-      }
-
-      window.addEventListener('message', listener)
-    })
-  }
-
-  static async list_keys (priv = false) {
-    return GPG._sendAndWaitForResponse({ 'action': 'list_keys', 'args': [priv], 'kwargs': {} })
-  }
-
-  static async sign (data, keyid, clearsign = false) {
-    return GPG._sendAndWaitForResponse({ 'action': 'sign', 'args': [data], 'kwargs': { keyid, clearsign, 'binary': false } })
-  }
-
-  static async verify (data) {
-    return GPG._sendAndWaitForResponse({ 'action': 'verify', 'args': [data], 'kwargs': {} })
-  }
-
-  static async verify_data (signature, data) {
-    const decrypted = await GPG.decrypt(signature)
-    return decrypted.valid && decrypted.data === data
-  }
-
-  static async encrypt (data, recipient) {
-    return GPG._sendAndWaitForResponse({ 'action': 'encrypt', 'args': [data, recipient], 'kwargs': { 'armor': true } })
-  }
-
-  static async decrypt (data) {
-    return GPG._sendAndWaitForResponse({ 'action': 'decrypt', 'args': [data], 'kwargs': {} })
-  }
-
-  static async export_key (keyid, minimal = false) {
-    return GPG._sendAndWaitForResponse({ 'action': 'export_keys', 'args': [keyid], 'kwargs': { minimal, 'armor': true} })
-  }
-}
+'use strict'
 
 document.addEventListener('DOMContentLoaded', async () => {
   const keys = await GPG.list_keys(true)
   const keysEl = document.querySelector('#private-keys')
 
   for (const key of keys) {
-    keysEl.innerHTML += `<option value="${key.keyid}">${key.uids[0]} (${key.keyid})</option>`
+    // https://github.com/gpg/gnupg/blob/master/doc/DETAILS#field-12---key-capabilities
+    if (key.cap.indexOf('E') > -1 && key.cap.indexOf('S') > -1) {
+      keysEl.innerHTML += `<option value="${key.keyid}">${key.uids[0].replace(/</g, '&lt;').replace(/>/g, '&gt;')} (${key.keyid})</option>`
+    }
   }
 
   const signMessageBtn = document.querySelector('#sign-message')
@@ -84,17 +34,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     })
 
-    const verifyMessageBtn = document.querySelector('#verify-message')
-  const messageToVerifyTxt = document.querySelector('#message-to-verify')
-
-  verifyMessageBtn
-    .addEventListener('click', async e => {
-      const keyid = keysEl.value
-      const verification = await GPG.verify(messageToVerifyTxt.value)
-
-      messageToVerifyTxt.value = JSON.stringify(verification)
-    })
-
   const verifyMessageWithDataBtn = document.querySelector('#verify-message-with-data')
   const messageToVerifySignature = document.querySelector('#message-to-verify-signature')
   const messageToVerifyData = document.querySelector('#message-to-verify-message')
@@ -102,9 +41,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   verifyMessageWithDataBtn
     .addEventListener('click', async e => {
       const keyid = keysEl.value
-      const verification = await GPG.verify_data(messageToVerifySignature.value, messageToVerifyData.value, keysEl.value)
 
-      messageToVerifySignature.value = verification ? 'valid' : 'invalid'
+      try {
+        const verification = await GPG.verify_data(messageToVerifySignature.value, messageToVerifyData.value, keysEl.value)
+        messageToVerifySignature.value = verification.keyid ? `valid from ${verification.keyid}` : 'invalid'
+      } catch (e) {
+        messageToVerifySignature.value = 'invalid signature'
+      }
     })
 
   const encryptMessageBtn = document.querySelector('#encrypt-message')
@@ -146,13 +89,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     <h2>Private Keys</h2>
     <select id="private-keys"></select>
     <hr>
-    <h2>Sign a message</h2>
+    <h2>Sign a message (detached)</h2>
     <textarea id="message-to-sign"></textarea>
     <button type="button" id="sign-message">Sign</button>
-    <hr>
-    <h2>Verify a message</h2>
-    <textarea id="message-to-verify"></textarea>
-    <button type="button" id="verify-message">Verify</button>
     <hr>
     <h2>Verify a message with data</h2>
     <textarea id="message-to-verify-signature"></textarea>
