@@ -3,11 +3,10 @@
   <head>
     <title>Demo</title>
     <meta charset="utf-8">
-    <script src="api.js"></script>
     <script>
 'use strict'
 
-document.addEventListener('DOMContentLoaded', async () => {
+onload = async () => {
   const keys = await GPG.list_keys(true)
   const keysEl = document.querySelector('#private-keys')
 
@@ -82,7 +81,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       publicKey.value = pk
     })
-})
+}
     </script>
   </head>
   <body>
