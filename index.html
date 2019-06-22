@@ -6,7 +6,7 @@
     <script>
 'use strict'
 
-onload = async () => {
+addEventListener('GPGLoaded', async e => {
   const keys = await GPG.list_keys(true)
   const keysEl = document.querySelector('#private-keys')
 
@@ -81,7 +81,7 @@ onload = async () => {
 
       publicKey.value = pk
     })
-}
+})
     </script>
   </head>
   <body>
